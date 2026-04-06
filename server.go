@@ -99,6 +99,12 @@ func (s *GinServer) Group(prefix string, m ...core.MiddlewareFunc) core.Router {
 	return s.router.Group(prefix, m...)
 }
 func (s *GinServer) Use(m ...core.MiddlewareFunc) { s.router.Use(m...) }
+func (s *GinServer) Static(path string, root string, m ...core.MiddlewareFunc) {
+	s.router.Static(path, root, m...)
+}
+func (s *GinServer) StaticFile(path string, filePath string, m ...core.MiddlewareFunc) {
+	s.router.StaticFile(path, filePath, m...)
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // GinRouter
@@ -142,5 +148,29 @@ func (r *GinRouter) Group(prefix string, mw ...core.MiddlewareFunc) core.Router 
 func (r *GinRouter) Use(mw ...core.MiddlewareFunc) {
 	for _, m := range mw {
 		r.group.Use(wrapMiddleware(m, r.errHandler))
+	}
+}
+
+func (r *GinRouter) Static(path string, root string, mw ...core.MiddlewareFunc) {
+	if len(mw) > 0 {
+		g := r.group.Group(path)
+		for _, m := range mw {
+			g.Use(wrapMiddleware(m, r.errHandler))
+		}
+		g.Static("", root)
+	} else {
+		r.group.Static(path, root)
+	}
+}
+
+func (r *GinRouter) StaticFile(path string, filePath string, mw ...core.MiddlewareFunc) {
+	if len(mw) > 0 {
+		g := r.group.Group(path)
+		for _, m := range mw {
+			g.Use(wrapMiddleware(m, r.errHandler))
+		}
+		g.StaticFile("", filePath)
+	} else {
+		r.group.StaticFile(path, filePath)
 	}
 }

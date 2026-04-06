@@ -2,6 +2,7 @@ package ginadapter
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -132,7 +133,18 @@ func (c *GinContext) SendStream(stream io.Reader) error {
 	return nil
 }
 
+func (c *GinContext) SendFile(filePath string) error {
+	c.ginCtx.File(filePath)
+	return nil
+}
+
+func (c *GinContext) Download(filePath string, filename string) error {
+	c.ginCtx.FileAttachment(filePath, filename)
+	return nil
+}
+
 func (c *GinContext) NoContent(status int) error { c.ginCtx.Status(status); return nil }
+func (c *GinContext) ResponseStatus() int        { return c.ginCtx.Writer.Status() }
 func (c *GinContext) SetHeader(k, v string)      { c.ginCtx.Header(k, v) }
 
 func (c *GinContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
@@ -164,8 +176,12 @@ func (c *GinContext) Get(key string) (interface{}, bool) { return c.ginCtx.Get(k
 
 // ─── Flow Control ───────────────────────────────────────────────────────────
 
-func (c *GinContext) Next() error             { c.ginCtx.Next(); return nil }
-func (c *GinContext) Underlying() interface{} { return c.ginCtx }
+func (c *GinContext) Next() error                 { c.ginCtx.Next(); return nil }
+func (c *GinContext) Underlying() interface{}     { return c.ginCtx }
+func (c *GinContext) RequestCtx() context.Context { return c.ginCtx.Request.Context() }
+func (c *GinContext) SetRequestCtx(ctx context.Context) {
+	c.ginCtx.Request = c.ginCtx.Request.WithContext(ctx)
+}
 
 // Clone returns a copy of GinContext that is safe to use in goroutines.
 // Uses gin.Context.Copy() which copies the request and context values.
