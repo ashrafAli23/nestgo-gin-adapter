@@ -38,7 +38,7 @@ func New(config *core.Config) core.Server {
 	var engine *gin.Engine
 	if config.DisableLogger {
 		engine = gin.New()
-		engine.Use(gin.Recovery())
+		// engine.Use(gin.Recovery())
 	} else {
 		engine = gin.Default()
 	}

@@ -3,7 +3,7 @@ module github.com/ashrafAli23/nestgo-gin-adapter
 go 1.25.0
 
 require (
-	github.com/ashrafAli23/nestgo v1.1.0
+	github.com/ashrafAli23/nestgo v1.2.0
 	github.com/gin-gonic/gin v1.12.0
 )
 
