@@ -2,7 +2,6 @@ package ginadapter
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -38,7 +37,7 @@ func New(config *core.Config) core.Server {
 	var engine *gin.Engine
 	if config.DisableLogger {
 		engine = gin.New()
-		// engine.Use(gin.Recovery())
+		engine.Use(gin.Recovery())
 	} else {
 		engine = gin.Default()
 	}
@@ -58,12 +57,26 @@ func (s *GinServer) Start(addr string) error {
 		ReadTimeout:  time.Duration(s.config.ReadTimeout) * time.Second,
 		WriteTimeout: time.Duration(s.config.WriteTimeout) * time.Second,
 	}
-	fmt.Printf("[NestGo] Starting Gin server on %s\n", addr)
+	core.Log().Info("starting server", core.F("adapter", "gin"), core.F("addr", addr))
 	return s.httpServer.ListenAndServe()
 }
 
+func (s *GinServer) StartTLS(addr, certFile, keyFile string) error {
+	if addr == "" {
+		addr = s.config.Addr
+	}
+	s.httpServer = &http.Server{
+		Addr:         addr,
+		Handler:      s.engine,
+		ReadTimeout:  time.Duration(s.config.ReadTimeout) * time.Second,
+		WriteTimeout: time.Duration(s.config.WriteTimeout) * time.Second,
+	}
+	core.Log().Info("starting TLS server", core.F("adapter", "gin"), core.F("addr", addr))
+	return s.httpServer.ListenAndServeTLS(certFile, keyFile)
+}
+
 func (s *GinServer) Shutdown(ctx context.Context) error {
-	fmt.Println("[NestGo] Shutting down Gin server...")
+	core.Log().Info("shutting down server", core.F("adapter", "gin"))
 	if s.httpServer != nil {
 		return s.httpServer.Shutdown(ctx)
 	}
@@ -94,6 +107,9 @@ func (s *GinServer) OPTIONS(p string, h core.HandlerFunc, m ...core.MiddlewareFu
 }
 func (s *GinServer) HEAD(p string, h core.HandlerFunc, m ...core.MiddlewareFunc) {
 	s.router.HEAD(p, h, m...)
+}
+func (s *GinServer) ANY(p string, h core.HandlerFunc, m ...core.MiddlewareFunc) {
+	s.router.ANY(p, h, m...)
 }
 func (s *GinServer) Group(prefix string, m ...core.MiddlewareFunc) core.Router {
 	return s.router.Group(prefix, m...)
@@ -135,6 +151,9 @@ func (r *GinRouter) OPTIONS(p string, h core.HandlerFunc, m ...core.MiddlewareFu
 }
 func (r *GinRouter) HEAD(p string, h core.HandlerFunc, m ...core.MiddlewareFunc) {
 	r.group.HEAD(p, wrapHandler(applyRouteMiddleware(h, m), r.errHandler))
+}
+func (r *GinRouter) ANY(p string, h core.HandlerFunc, m ...core.MiddlewareFunc) {
+	r.group.Any(p, wrapHandler(applyRouteMiddleware(h, m), r.errHandler))
 }
 
 func (r *GinRouter) Group(prefix string, mw ...core.MiddlewareFunc) core.Router {

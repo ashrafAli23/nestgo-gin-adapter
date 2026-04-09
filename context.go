@@ -22,20 +22,41 @@ var contextPool = sync.Pool{
 func acquireContext(gc *gin.Context) *GinContext {
 	ctx := contextPool.Get().(*GinContext)
 	ctx.ginCtx = gc
+	rec := &bodyRecorder{ResponseWriter: gc.Writer}
+	gc.Writer = rec
+	ctx.recorder = rec
 	return ctx
 }
 
 func releaseContext(ctx *GinContext) {
 	ctx.ginCtx = nil
+	ctx.recorder = nil
 	ctx.bodyRead = false
 	ctx.bodyData = nil
 	ctx.bodyErr = nil
 	contextPool.Put(ctx)
 }
 
+// bodyRecorder wraps gin.ResponseWriter to capture the response body.
+type bodyRecorder struct {
+	gin.ResponseWriter
+	body bytes.Buffer
+}
+
+func (r *bodyRecorder) Write(b []byte) (int, error) {
+	r.body.Write(b)
+	return r.ResponseWriter.Write(b)
+}
+
+func (r *bodyRecorder) WriteString(s string) (int, error) {
+	r.body.WriteString(s)
+	return r.ResponseWriter.WriteString(s)
+}
+
 // GinContext wraps gin.Context to implement core.Context.
 type GinContext struct {
 	ginCtx   *gin.Context
+	recorder *bodyRecorder
 	bodyRead bool
 	bodyData []byte
 	bodyErr  error
@@ -145,7 +166,13 @@ func (c *GinContext) Download(filePath string, filename string) error {
 
 func (c *GinContext) NoContent(status int) error { c.ginCtx.Status(status); return nil }
 func (c *GinContext) ResponseStatus() int        { return c.ginCtx.Writer.Status() }
-func (c *GinContext) SetHeader(k, v string)      { c.ginCtx.Header(k, v) }
+func (c *GinContext) ResponseBody() []byte {
+	if c.recorder == nil {
+		return nil
+	}
+	return c.recorder.body.Bytes()
+}
+func (c *GinContext) SetHeader(k, v string) { c.ginCtx.Header(k, v) }
 
 func (c *GinContext) SetCookie(name, value string, maxAge int, path, domain string, secure, httpOnly bool) {
 	c.ginCtx.SetCookie(name, value, maxAge, path, domain, secure, httpOnly)
@@ -171,8 +198,11 @@ func (c *GinContext) FullURL() string {
 
 // ─── Context Storage ────────────────────────────────────────────────────────
 
-func (c *GinContext) Set(key string, value interface{})  { c.ginCtx.Set(key, value) }
-func (c *GinContext) Get(key string) (interface{}, bool) { return c.ginCtx.Get(key) }
+func (c *GinContext) Set(key string, value interface{}) { c.ginCtx.Set(key, value) }
+func (c *GinContext) Get(key string) interface{} {
+	val, _ := c.ginCtx.Get(key)
+	return val
+}
 
 // ─── Flow Control ───────────────────────────────────────────────────────────
 
