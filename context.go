@@ -22,6 +22,7 @@ var contextPool = sync.Pool{
 func acquireContext(gc *gin.Context) *GinContext {
 	ctx := contextPool.Get().(*GinContext)
 	ctx.ginCtx = gc
+	ctx.originalWriter = gc.Writer
 	rec := &bodyRecorder{ResponseWriter: gc.Writer}
 	gc.Writer = rec
 	ctx.recorder = rec
@@ -29,8 +30,12 @@ func acquireContext(gc *gin.Context) *GinContext {
 }
 
 func releaseContext(ctx *GinContext) {
+	if ctx.ginCtx != nil && ctx.originalWriter != nil {
+		ctx.ginCtx.Writer = ctx.originalWriter
+	}
 	ctx.ginCtx = nil
 	ctx.recorder = nil
+	ctx.originalWriter = nil
 	ctx.bodyRead = false
 	ctx.bodyData = nil
 	ctx.bodyErr = nil
@@ -55,11 +60,12 @@ func (r *bodyRecorder) WriteString(s string) (int, error) {
 
 // GinContext wraps gin.Context to implement core.Context.
 type GinContext struct {
-	ginCtx   *gin.Context
-	recorder *bodyRecorder
-	bodyRead bool
-	bodyData []byte
-	bodyErr  error
+	ginCtx         *gin.Context
+	recorder       *bodyRecorder
+	originalWriter gin.ResponseWriter
+	bodyRead       bool
+	bodyData       []byte
+	bodyErr        error
 }
 
 // ─── Request ────────────────────────────────────────────────────────────────
