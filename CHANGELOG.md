@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] - 2026-08-24
 
 ### Security
 
@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Upgraded all transitive dependencies to latest stable, including `bytedance/sonic` v1.15.2, `go-playground/validator/v10` v10.30.3, `quic-go` v0.61.0, `golang.org/x/crypto` v0.55.0, and `golang.org/x/net` v0.58.0. Gin itself remains at `v1.12.0` (latest stable).
+- Upgraded all transitive dependencies to latest stable, including `bytedance/sonic` v1.15.2, `go-playground/validator/v10` v10.30.3, `quic-go` v0.61.0, `golang.org/x/crypto` v0.55.0, and `golang.org/x/net` v0.58.0. Gin itself remains at `v1.12.0` (latest stable). Core dependency `github.com/ashrafAli23/nestgo` upgraded to `v1.4.0`.
 - **Behavior change:** middleware added via `Use()` after a route is registered no longer applies to that route — middleware chains are now composed into the route's handler at registration time (converges with the Fiber adapter).
 
 ### Added

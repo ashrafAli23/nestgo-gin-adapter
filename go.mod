@@ -3,7 +3,7 @@ module github.com/ashrafAli23/nestgo-gin-adapter
 go 1.25.14
 
 require (
-	github.com/ashrafAli23/nestgo v1.3.1
+	github.com/ashrafAli23/nestgo v1.4.0
 	github.com/gin-gonic/gin v1.12.0
 )
 
@@ -28,7 +28,6 @@ require (
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.61.0 // indirect
-	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.2 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.8.0 // indirect
