@@ -477,8 +477,8 @@ func (c *GinContext) ResponseStatus() int {
 	return c.ginCtx.Writer.Status()
 }
 
-// ResponseBody returns the buffered response body, or nil once the response
-// has been streamed to the client.
+// ResponseBody returns a copy of the buffered response body, or nil once the
+// response has been streamed to the client.
 func (c *GinContext) ResponseBody() []byte {
 	c.checkReleased()
 	if c.recorder == nil || c.recorder.streamed {
@@ -487,7 +487,7 @@ func (c *GinContext) ResponseBody() []byte {
 	if c.recorder.body.Len() == 0 {
 		return nil
 	}
-	return c.recorder.body.Bytes()
+	return append([]byte(nil), c.recorder.body.Bytes()...)
 }
 
 func (c *GinContext) SetHeader(k, v string) { c.checkReleased(); c.ginCtx.Header(k, v) }
