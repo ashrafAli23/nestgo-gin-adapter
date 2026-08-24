@@ -58,11 +58,14 @@
 //
 // Responses are buffered (status, headers, body) and flushed to the client
 // exactly once at the end of the request, so middleware may inspect
-// [core.Context.ResponseBody], set headers after the handler ran, or replace
-// the response via [core.ResponseResetter]. [core.Context.SendStream],
-// [core.Context.SendFile], and [core.Context.Download] switch to direct
-// streaming (flushed per chunk — this also serves SSE); once streamed,
-// ResponseBody returns nil.
+// [core.Context.ResponseBody] (which returns a copy of the buffered body),
+// set headers after the handler ran, or replace the response via
+// [core.ResponseResetter]. [core.Context.SendStream] switches to direct
+// streaming: the status and headers are flushed to the wire before the first
+// chunk is read (so SSE/EventSource clients that wait for headers never
+// hang), and each chunk is flushed as it is written, so streamed responses
+// are sent chunked. [core.Context.SendFile] and [core.Context.Download]
+// likewise bypass the buffer. Once streamed, ResponseBody returns nil.
 //
 // # Context Pooling
 //

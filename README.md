@@ -6,6 +6,7 @@
 <p align="center">
   <a href="https://pkg.go.dev/github.com/ashrafAli23/nestgo-gin-adapter"><img src="https://pkg.go.dev/badge/github.com/ashrafAli23/nestgo-gin-adapter.svg" alt="NestGo Gin Adapter Go Reference"></a>
   <a href="https://goreportcard.com/report/github.com/ashrafAli23/nestgo-gin-adapter"><img src="https://goreportcard.com/badge/github.com/ashrafAli23/nestgo-gin-adapter" alt="NestGo Gin Adapter Go Report Card"></a>
+  <a href="https://github.com/ashrafAli23/nestgo-gin-adapter/actions/workflows/ci.yml"><img src="https://github.com/ashrafAli23/nestgo-gin-adapter/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/ashrafAli23/nestgo-gin-adapter/releases"><img src="https://img.shields.io/github/v/release/ashrafAli23/nestgo-gin-adapter?style=flat-square" alt="Release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
@@ -142,7 +143,7 @@ Because composition happens at registration, middleware added via `Use()` **afte
 
 ### Buffered Responses & Real-Time Streaming
 
-Each request writes into a single buffered response recorder that is flushed to the client exactly once — so interceptors can read `ResponseBody()`, mutate headers after the handler runs, and never double-write. `SendStream`, `SendFile`, and `Download` switch to direct streaming with a flush per chunk, which serves Server-Sent Events (SSE) in real time and keeps large downloads out of memory.
+Each request writes into a single buffered response recorder that is flushed to the client exactly once — so interceptors can read `ResponseBody()` (a copy of the buffered body), mutate headers after the handler runs, and never double-write. `SendStream` switches to direct streaming: the status and headers are flushed to the wire before the first chunk is read (so Server-Sent Events / `EventSource` clients that wait for headers never hang), and every chunk is flushed as it is written — streamed responses therefore go out chunked. `SendFile` and `Download` also bypass the buffer, keeping large downloads out of memory. Once a response has been streamed, `ResponseBody()` returns `nil`.
 
 ### Accessing Raw Gin Configurations & APIs
 
@@ -245,6 +246,10 @@ server := gin.New(&core.Config{
 | **Go (Golang)**         | `v1.25.14+`              |
 | **Gin Gonic Framework** | `v1.12+`                 |
 | **NestGo Core**         | `v1.x`                   |
+
+## ✅ Conformance
+
+This adapter passes the [NestGo adapter conformance suite](https://ashrafali23.github.io/nestgo/writing-an-adapter.html) — 22 behavioral checks (routing, request/response semantics, middleware, errors, context safety, streaming/SSE, body limits, graceful shutdown), run on every push in CI (`go test -race ./...`).
 
 ## 📚 API Reference Navigation
 
