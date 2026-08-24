@@ -14,6 +14,8 @@
 
 The **NestGo Gin Adapter** (`nestgo-gin-adapter`) seamlessly bridges the gap between the [Gin web framework](https://gin-gonic.com) and [NestGo](https://github.com/ashrafAli23/nestgo).
 
+> **📚 Documentation:** <https://ashrafali23.github.io/nestgo/adapters.html>
+
 By implementing NestGo's `core.Server`, `core.Router`, and `core.Context` interfaces, this adapter allows you to leverage NestGo's powerful Dependency Injection (DI), Guards, Interceptors, Pipes, and Middleware ecosystem while utilizing Gin's battle-tested, high-performance routing engine for building modern Go (Golang) REST APIs and microservices.
 
 ## 📦 Installation
@@ -82,7 +84,7 @@ NestGo's powerful adapter pattern means switching your HTTP engine from Fiber to
 
 ### Context Pooling
 
-Context allocations are tightly managed using standard `sync.Pool`. This achieves **zero allocation per request** for context structs. Each incoming HTTP request acquires a `GinContext` from the shared pool and reliably releases it immediately after the handler unrolls.
+Context allocations are tightly managed using standard `sync.Pool`. This achieves **zero allocation per request** for context structs. Each incoming HTTP request acquires a `GinContext` from the shared pool and reliably releases it immediately after the handler unrolls. As a safety net, every context method checks an `atomic.Bool` released flag — accidentally using a context after the handler returned panics with a clear use-after-release message (use `Clone()` for goroutines) instead of silently reading another request's data.
 
 ### Smart Body Caching
 
@@ -115,7 +117,7 @@ server.GET("/async", func(c core.Context) error {
 })
 ```
 
-`Clone()` smartly delegates to `gin.Context.Copy()`, precisely duplicating the incoming HTTP request context values into an isolated struct.
+`Clone()` produces a fully detached snapshot: the request body is pre-read and copied, context values and route params are duplicated via `gin.Context.Copy()`, and the request is detached with `context.WithoutCancel` so the clone's `RequestCtx()` keeps working after the original handler completes. Response methods on the clone succeed harmlessly but write nothing to the client.
 
 ### Advanced Route Groups
 
@@ -131,6 +133,16 @@ admin := api.Group("/admin", middleware.RateLimit(middleware.RateLimitConfig{
 }))
 admin.DELETE("/users/:id", deleteUser)
 ```
+
+### Middleware Composition & Error Propagation
+
+The full middleware chain (group chain outermost, then route middleware, then the handler) is composed into a **single native Gin handler per route** at registration time. Errors returned by a handler flow back through every middleware — NestGo exception filters and interceptors see them — and the configured error handler runs exactly once, only if nothing has been written to the response yet. Panics are recovered by the adapter into a logged 500 through the same error path.
+
+Because composition happens at registration, middleware added via `Use()` **after** a route is registered does not apply to that route — register global middleware before your routes (NestGo's DI container already does this automatically).
+
+### Buffered Responses & Real-Time Streaming
+
+Each request writes into a single buffered response recorder that is flushed to the client exactly once — so interceptors can read `ResponseBody()`, mutate headers after the handler runs, and never double-write. `SendStream`, `SendFile`, and `Download` switch to direct streaming with a flush per chunk, which serves Server-Sent Events (SSE) in real time and keeps large downloads out of memory.
 
 ### Accessing Raw Gin Configurations & APIs
 
@@ -188,42 +200,49 @@ Instantiate with explicit `*core.Config` struct references via `New()`:
 
 ```go
 server := gin.New(&core.Config{
-    AppName:       "microservices-api",
-    Addr:          ":8080",
-    Debug:         false,
-    DisableLogger: false,
-    ReadTimeout:   30,
-    WriteTimeout:  30,
-    BodyLimit:     10 * 1024 * 1024,
-    ErrorHandler:  customErrorHandler,
+    Addr:              ":8080",
+    Debug:             false,
+    DisableLogger:     false,
+    ReadTimeout:       30,
+    WriteTimeout:      30,
+    ReadHeaderTimeout: 10,
+    IdleTimeout:       60,
+    MaxHeaderBytes:    1 << 20,
+    BodyLimit:         10 * 1024 * 1024,
+    ErrorHandler:      customErrorHandler,
 })
 ```
 
-| Field           | Type                | Default   | Description                                                                |
-| --------------- | ------------------- | --------- | -------------------------------------------------------------------------- |
-| `AppName`       | `string`            | `""`      | Enterprise Application Identifier                                          |
-| `Addr`          | `string`            | `":3000"` | TCP Network Addr and Port                                                  |
-| `Debug`         | `bool`              | `false`   | Enable Gin Debug level logging (prints routing paths)                      |
-| `DisableLogger` | `bool`              | `false`   | Disables Gin's built-in global logger middleware                           |
-| `ReadTimeout`   | `int`               | `0`       | Prevent large payload DOS - Reading timeout (seconds)                      |
-| `WriteTimeout`  | `int`               | `0`       | HTTP Responding timeout limit (seconds)                                    |
-| `BodyLimit`     | `int`               | `0`       | Upper limit for HTTP JSON Body bytes (`Content-Length`)                    |
-| `ErrorHandler`  | `core.ErrorHandler` | `nil`     | Global exception catching interface defaults to `core.DefaultErrorHandler` |
+| Field               | Type                | Default   | Description                                                                |
+| ------------------- | ------------------- | --------- | -------------------------------------------------------------------------- |
+| `Addr`              | `string`            | `":3000"` | TCP Network Addr and Port                                                  |
+| `Debug`             | `bool`              | `false`   | Enable Gin Debug level logging (prints routing paths)                      |
+| `DisableLogger`     | `bool`              | `false`   | Disables Gin's built-in global logger middleware                           |
+| `ReadTimeout`       | `int`               | `0`       | Prevent large payload DOS - Reading timeout (seconds)                      |
+| `WriteTimeout`      | `int`               | `0`       | HTTP Responding timeout limit (seconds)                                    |
+| `ReadHeaderTimeout` | `int`               | `10`      | Header read timeout in seconds (Slowloris protection)                      |
+| `IdleTimeout`       | `int`               | `60`      | Keep-alive idle connection timeout (seconds)                               |
+| `MaxHeaderBytes`    | `int`               | `1 << 20` | Max request header size in bytes (1MB default)                             |
+| `BodyLimit`         | `int`               | `0`       | Max request body size in bytes — enforced, oversized bodies get 413        |
+| `ErrorHandler`      | `core.ErrorHandler` | `nil`     | Global exception catching interface defaults to `core.DefaultErrorHandler` |
+
+> Note: `AppName` is currently not used by the Gin adapter (the Fiber adapter applies it to `fiber.Config.AppName`).
 
 ## ⚡ Performance Summary
 
 | Architectural Optimization | Underlying Technique                   | Application Impact                                  |
 | -------------------------- | -------------------------------------- | --------------------------------------------------- |
-| **Context Memory Pooling** | Go stdlib `sync.Pool`                  | Guaranteed Zero allocation per concurrent request   |
-| **IO Body Caching**        | Raw slice reuse through `append([:0])` | Evades expensive double-read runtime allocations    |
-| **Timeout Lifecycles**     | Standard HTTP standard library server  | Native `net/http` timeouts against connection drops |
-| **Middleware Composition** | Compile-time interface adaptation      | Seamless chaining parity with zero overhead         |
+| **Context Memory Pooling** | Go stdlib `sync.Pool` + released flag  | Zero context-struct alloc, loud misuse panics       |
+| **IO Body Caching**        | Single read cached per request         | Evades expensive double-read runtime allocations    |
+| **Response Buffering**     | One shared recorder, flushed once      | Response introspection; direct streaming for SSE    |
+| **Timeout Lifecycles**     | Standard HTTP standard library server  | Full `net/http` timeout + header-size protection    |
+| **Middleware Composition** | One composed native handler per route  | Errors reach filters; error handler runs once       |
 
 ## 📌 Framework Compatibility
 
 | Software Dependency     | Supported Version ranges |
 | ----------------------- | ------------------------ |
-| **Go (Golang)**         | `v1.23+`                 |
+| **Go (Golang)**         | `v1.25.14+`              |
 | **Gin Gonic Framework** | `v1.12+`                 |
 | **NestGo Core**         | `v1.x`                   |
 

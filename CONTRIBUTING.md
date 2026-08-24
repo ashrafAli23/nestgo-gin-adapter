@@ -14,7 +14,7 @@ Thank you for your interest in contributing!
 
 ### Prerequisites
 
-- Go 1.23 or later
+- Go 1.25.14 or later
 - Gin v1.12+
 
 ### Project Structure
@@ -24,7 +24,6 @@ nestgo-gin-adapter/
   context.go       # GinContext — implements core.Context
   server.go        # GinServer/GinRouter — implements core.Server/Router
   doc.go           # Package documentation
-  example_test.go  # Testable examples for pkg.go.dev
 ```
 
 ### Key Design Principles

@@ -1,4 +1,7 @@
-// Package ginadapter provides a [Gin] adapter for the NestGo framework.
+// Package ginadapter provides a [Gin] adapter for NestGo, the NestJS-style
+// web framework for Go.
+//
+// Full documentation: https://ashrafali23.github.io/nestgo/adapters.html
 //
 // It implements [core.Server], [core.Router], and [core.Context] on top of
 // [github.com/gin-gonic/gin], letting you use NestGo's Guards, Interceptors,
@@ -45,6 +48,22 @@
 // to the underlying [gin.Context] — you never touch Gin APIs directly unless
 // you choose to via [GinContext.Underlying].
 //
+// Middleware registered with Use/Group and route middleware are composed
+// in-process into ONE native gin handler per route (group chain outermost).
+// Errors returned by handlers therefore flow back through every middleware,
+// so exception filters and interceptors observe them, and the configured
+// error handler runs exactly once — only if nothing was written yet.
+//
+// # Response Buffering
+//
+// Responses are buffered (status, headers, body) and flushed to the client
+// exactly once at the end of the request, so middleware may inspect
+// [core.Context.ResponseBody], set headers after the handler ran, or replace
+// the response via [core.ResponseResetter]. [core.Context.SendStream],
+// [core.Context.SendFile], and [core.Context.Download] switch to direct
+// streaming (flushed per chunk — this also serves SSE); once streamed,
+// ResponseBody returns nil.
+//
 // # Context Pooling
 //
 // Contexts are managed with [sync.Pool] to avoid allocation per request.
@@ -73,8 +92,11 @@
 //	    return c.JSON(202, map[string]string{"status": "accepted"})
 //	})
 //
-// [Clone] delegates to [gin.Context.Copy], which copies the request and
-// all context values into a new struct that is independent of the pool.
+// [Clone] returns a detached snapshot: the request body is pre-read and
+// copied, context values are copied, and the clone's request context is not
+// canceled when the handler returns. Response calls on a clone succeed but
+// write nowhere. Using the ORIGINAL context after the handler returns
+// panics with a clear use-after-release message.
 //
 // # Route Groups
 //
