@@ -396,8 +396,14 @@ func (c *GinContext) SendStream(stream io.Reader) error {
 		return err
 	}
 	rec.startStreaming()
-	// Send headers before the first chunk — SSE clients wait on them.
-	rec.ResponseWriter.WriteHeaderNow()
+	// Send headers before the first chunk — SSE clients (and any reader that
+	// waits for a response before producing data) wait on them.
+	// WriteHeaderNow alone only marks gin's writer as headers-written; the
+	// bytes stay buffered inside net/http until an explicit Flush reaches
+	// the socket, so a blocking first Read below would deadlock the client
+	// waiting on headers that were never actually sent. Flush both writes
+	// the header and pushes it to the wire.
+	rec.ResponseWriter.Flush()
 	buf := make([]byte, streamCopyBufSize)
 	for {
 		n, rerr := stream.Read(buf)
