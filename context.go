@@ -385,33 +385,45 @@ func (c *GinContext) SendBytes(status int, data []byte) error {
 	return nil
 }
 
+// streamWriter is the minimal capability SendStream needs: write bytes and
+// push them to the socket. *responseRecorder satisfies it (its Flush engages
+// direct-streaming mode on first call, then flushes); so does the raw
+// gin.ResponseWriter, used as a defensive fallback when no recorder is
+// installed.
+type streamWriter interface {
+	Write([]byte) (int, error)
+	Flush()
+}
+
 // SendStream streams the reader to the client in direct streaming mode:
-// buffered headers/status are written first, then each chunk is flushed as
-// it is copied (which also serves SSE). The copy stops on EOF.
+// headers/status are flushed to the wire first, then each chunk is written
+// and flushed as it is copied (which also serves SSE). The copy stops on EOF.
 func (c *GinContext) SendStream(stream io.Reader) error {
 	c.checkReleased()
-	rec := c.recorder
-	if rec == nil {
-		_, err := io.Copy(c.ginCtx.Writer, stream)
-		return err
+	var w streamWriter
+	if rec := c.recorder; rec != nil {
+		w = rec
+	} else {
+		// Defensive fallback for a context with no installed recorder — goes
+		// through the exact same flush-before-first-read, flush-per-chunk
+		// path as the recorder above so it cannot deadlock either.
+		w = c.ginCtx.Writer
 	}
-	rec.startStreaming()
 	// Send headers before the first chunk — SSE clients (and any reader that
-	// waits for a response before producing data) wait on them.
-	// WriteHeaderNow alone only marks gin's writer as headers-written; the
-	// bytes stay buffered inside net/http until an explicit Flush reaches
-	// the socket, so a blocking first Read below would deadlock the client
-	// waiting on headers that were never actually sent. Flush both writes
-	// the header and pushes it to the wire.
-	rec.ResponseWriter.Flush()
+	// waits for a response before producing data) wait on them. Flush is
+	// what actually pushes bytes to the socket (for the recorder, it also
+	// engages direct-streaming mode); a bare WriteHeaderNow only marks the
+	// header as written without reaching the wire, so a blocking first Read
+	// below would otherwise deadlock the client.
+	w.Flush()
 	buf := make([]byte, streamCopyBufSize)
 	for {
 		n, rerr := stream.Read(buf)
 		if n > 0 {
-			if _, werr := rec.Write(buf[:n]); werr != nil {
+			if _, werr := w.Write(buf[:n]); werr != nil {
 				return werr
 			}
-			rec.Flush()
+			w.Flush()
 		}
 		if rerr == io.EOF {
 			return nil
